@@ -66,12 +66,15 @@ def cpu_bound() -> Future:
     future.set_result(sum(i * i for i in range (10 ** pow_val)))
     return future
 
+async def async_cpu_bound():
+    return cpu_bound()
+
 async def async_executors():
     loop = asyncio.get_running_loop()
 
     # 1. Run in the default loop's executor
     future_1 = await loop.run_in_executor(executor=None, func=blocking_io)
-    print('default thread pool future: ', future_1)
+    # print('default thread pool future: ', future_1)
     print('result of future_1: ', future_1.result())
 
 
@@ -79,10 +82,10 @@ async def async_executors():
     with concurrent.futures.ThreadPoolExecutor() as thread_pool:
         # 事前に用意したカスタムスレッドプールで非同期用のイベントループを起動させる
         future_2_1 = await loop.run_in_executor(executor=thread_pool, func=cpu_bound)
-        print('custom thread pool future_2_1: ', future_2_1)
+        # print('custom thread pool future_2_1: ', future_2_1)
         print('result of future_2_1: ', future_2_1.result())
         future_2_2 = await loop.run_in_executor(executor=thread_pool, func=cpu_bound)
-        print('custom thread pool future_2_2: ', future_2_2)
+        # print('custom thread pool future_2_2: ', future_2_2)
         print('result of future_2_2: ', future_2_2.result())
 
 
@@ -92,6 +95,44 @@ async def async_executors():
     #     future_3_1 = await loop.run_in_executor(executor=process_pool, func=cpu_bound)
     #     print('custom thread pool future_3_1: ', future_3_1)
     #     print('result of future_3_1: ', future_3_1.result())
+
+async def async_unique_task():
+    task = asyncio.create_task(async_executors(), name="some-executors")
+    # await task
+
+    # print(f"[START] coroutine with asyncio.gather")
+    # results = asyncio.gather(
+    #     async_cpu_bound(),
+    #     async_cpu_bound(),
+    #     async_cpu_bound(),
+    # )
+    # print(f"[END] coroutine with asyncio.gather")
+
+    background_tasks = set()
+    for i in range(3):
+        task = asyncio.create_task(async_cpu_bound())
+        background_tasks.add(task) # タスク実行中にガーベージコレクションで消されないように保持
+
+    done_count: int = 0
+    results: List[Any] = []
+
+    print('background_tasks: ', background_tasks)
+
+    it = iter(list(background_tasks))
+    while done_count < len(background_tasks):
+        future = next(it)
+        if future.done():
+            results.append(future.result())
+            done_count += 1    
+            print('Done')
+    print('results: ', results)
+
+    print('1th result: ', results[0])
+    print('2nd result: ', results[1])
+    print('3rd result: ', results[2])
+    await task
+
+
 
 def main_0():
     asyncio.run(async_hello())
@@ -105,8 +146,12 @@ def main_2():
 def main_3():
     asyncio.run(async_executors())
 
+def main_4():
+    asyncio.run(async_unique_task())
+
 if __name__ == "__main__":
     # main_0()
     # main_1()
     # main_2()
-    main_3()
+    # main_3()
+    main_4()
